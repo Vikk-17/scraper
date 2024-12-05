@@ -12,8 +12,7 @@ class QuickScan:
     
     # Dont't touch it
     __base_url = "https://services.nvd.nist.gov/rest/json/cves/2.0/"
-    __api_key = "4cbc51de-0f87-4b10-b600-0b4aa26bf3cc"
-
+    __api_key = "api key"
     def __init__(self, product_name:str = None, product_version:str = None, product_cve:str = None):
         self.product_name = product_name
         self.product_version = product_version
@@ -114,8 +113,3 @@ class QuickScan:
         # return parsed_data
         return parsed_data_list
 
-
-# # runScan = QuickScan("NVIDIA nemo")
-# runScan = QuickScan("CVE-2022-22821")
-# runScan = QuickScan("NVIDIA nemo","CVE-2022-22821")
-# print(asyncio.run(runScan.parse_formatted_data()))

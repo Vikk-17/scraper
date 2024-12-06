@@ -68,7 +68,7 @@ class EmailSender:
             doc.save(filename)
             return filename
         except Exception as e:
-            raise Exception(f"Cann't generate or save file: {r}")
+            raise Exception(f"Cann't generate or save file: {e}")
 
     def send_email(self):
         """To Send the email"""

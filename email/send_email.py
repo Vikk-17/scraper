@@ -9,79 +9,88 @@ import json
 import os
 from dotenv import load_dotenv
 
-# take environment variable from .env file
+# Load environment variables from .env file
 load_dotenv()
 
 
 class EmailSender:
     """
-    To send the email
-    :params: It takes user email of particular user
-    :output: make the document file and send to the user
+    To send the email with a document of vulnerabilities
+    :params: raw_data, contains the user email and vulnerability details
+    :output: generate a report and send it via email
     """
 
-    def __init__(self, raw_data:str):
-        self.sender_email = os.getenv("SENDER_EMAIL")
-        self.sender_password = os.getenv("SENDER_PASSWORD")
+    def __init__(self, raw_data: str):
+        self.sender_email = "cyberalerter11@gmail.com"
+        self.sender_password = "sbdv cfei kzuw ajtv"  # Use environment variable for password
         self.subject = "Mail regarding critical vulnerabilities"
-        self.body = "Here are your report of vulnerabilities\n"
+        self.body = "Here is your report of vulnerabilities:\n"
         try:
             self.obj_data = json.loads(raw_data)
         except Exception as e:
-            raise Exception(f"Error while processing the raw data {e}")
+            raise Exception(f"Error while processing the raw data: {e}")
 
-
-    def getEmail(self)-> str:
+    def get_email(self) -> str:
         """Get the email from the dictionary file"""
         try:
-            return (self.obj_data).get("userEmail")
+            return self.obj_data.get("userEmail")
         except Exception as e:
-            raise Exception(f"Can't get the user email {e}")
+            raise Exception(f"Can't get the user email: {e}")
 
-    def format_data(self) -> dict:
+    def format_data(self) -> str:
         """Get the description and format it"""
         try:
-            scan_details_obj = self.obj_data.get("scanDetails")
-            output_data = {
-                "CVE ID": scan_details_obj.get('cve_id'),
-                "Severity": scan_details_obj.get('baseSeverity'),
-                "Description": scan_details_obj.get('vulnerabilityDescription'),
-                "Mitigation": scan_details_obj.get('Mitigation'),
-                "Published Date": scan_details_obj.get('published date'),
-                "URL": scan_details_obj.get('url'),
-            }
+            scan_details_obj = self.obj_data.get("scanDetails", {})
+            results = scan_details_obj.get("results", [])
+
+            output_data = f"Product Name: {scan_details_obj.get('productName', 'Unknown')}\n"
+            output_data += f"Product Version: {scan_details_obj.get('productVersion', 'N/A')}\n"
+            output_data += "\nVulnerabilities:\n"
+            output_data += "-" * 70 + "\n"
+
+            for vuln in results:
+                output_data += f"""
+                    CVE ID: {vuln.get('cve_id')}
+                    Severity: {vuln.get('baseSeverity')}
+                    Description: {vuln.get('vulnerabilityDescription')}
+                    Mitigation: {vuln.get('Mitigation', 'N/A')}
+                    Published Date: {vuln.get('published_date')}
+                    Last Modified: {vuln.get('last_modified')}
+                    URL: {vuln.get('oemUrl')}
+                        """
+                output_data += "-" * 70 + "\n"
 
             return output_data
 
         except Exception as e:
-            raise Exception(f"Can't create the format {e}")
+            raise Exception(f"Can't create the format: {e}")
 
     def create_doc(self) -> str:
         """To create the document"""
         try:
             doc = Document()
             doc.add_heading("Details of your product", level=1)
-            doc.add_paragraph("\n\nBelow you may find the vulnerabilities\n\n")
-            for key, value in (self.format_data()).items():
-                doc.add_paragraph(f"{key}: {value}")
-            filename = "vuln.docx"
+            doc.add_paragraph("Below you may find the vulnerabilities for your product:\n")
+            formatted_data = self.format_data()  # Now contains data for all vulnerabilities
+            doc.add_paragraph(formatted_data)
+            filename = "vuln_report.docx"
             doc.save(filename)
             return filename
         except Exception as e:
-            raise Exception(f"Cann't generate or save file: {e}")
+            raise Exception(f"Can't generate or save file: {e}")
 
     def send_email(self):
-        """To Send the email"""
-
+        """To send the email with the attachment"""
         try:
             message = MIMEMultipart()
             message["From"] = self.sender_email
-            message["To"] = self.getEmail()
+            message["To"] = self.get_email()
             message["Subject"] = self.subject
 
             # Email body
             message.attach(MIMEText(self.body, "plain"))
             file_to_send = self.create_doc()
+
             # Attach the file
             with open(file_to_send, "rb") as attachment_file:
                 part = MIMEBase("application", "octet-stream")
@@ -101,26 +110,25 @@ class EmailSender:
             print(f"Error in sending email: {e}")
 
 
-def main():
-    test_data = """{
-        "userEmail": "chakraborty7117@gmail.com",
-        "scanDetails": {
-            "cve_id": "CVE-2024-0001",
-            "baseSeverity": "High",
-            "vulnerabilityDescription": "Sample vulnerability description.",
-            "Mitigation": "Apply patch X.",
-            "published date": "2024-11-29",
-            "url": "http://example.com"
-        }
-    }
-    """
-    try:
-        # input_data = sys.stdin.read()
-        sendEmail = EmailSender(test_data)
-        sendEmail.send_email()
 
+def main():
+    try:
+        
+        # with open("input_data.json", 'r') as file:
+        #    data = json.load(file)
+        input_raw_data: str = sys.stdin.read()
     except Exception as e:
-        print("Unexpected error while sending email: {e}")
+        return f"Can't access data from backend {e}"
+
+    # except json.JSONDecodeError as e:
+    #     print(f"Error in JSON format: {e}")
+    #     return  # Stop further execution if JSON is invalid
+
+    try:
+        send_email_instance = EmailSender(input_raw_data)
+        send_email_instance.send_email()
+    except Exception as e:
+        print(f"Unexpected error while sending email: {e}")
 
 
 if __name__ == "__main__":

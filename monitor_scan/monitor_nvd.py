@@ -12,7 +12,8 @@ class QuickScan:
     
     # Dont't touch it
     __base_url = "https://services.nvd.nist.gov/rest/json/cves/2.0/"
-    __api_key = "api key"
+    __api_key = "4cbc51de-0f87-4b10-b600-0b4aa26bf3cc"
+
     def __init__(self, product_name:str = None, product_version:str = None, product_cve:str = None):
         self.product_name = product_name
         self.product_version = product_version
@@ -24,8 +25,7 @@ class QuickScan:
             if response.status == 200:
                 data = await response.json()
                 return data
-            else:
-                return f"Error in fetching the data\n Status code: {response.status}"
+            return f"Error in fetching the data\n Status code: {response.status}"
 
     async def monitor_nvd_for_products(self):
         """
@@ -45,17 +45,11 @@ class QuickScan:
                     payload = {
                         'keywordSearch': self.product_name,
                     }
-                    raw_data = await self.fetch_data(session_name=session, url=self.__base_url, params=payload, headers={"apiKey": self.__api_key})
-                    return raw_data
-                
                 # with the cve_id only
                 elif self.product_cve :
                     payload = {
                         'cveId': self.product_cve,
                     }
-                    raw_data = await self.fetch_data(session_name=session, url=self.__base_url, params=payload, headers={"apiKey": self.__api_key})
-                    return raw_data
-                
                 # TODO: with both product_name and cve_id: bug
                 # else:
                 #     payload = {
@@ -64,6 +58,13 @@ class QuickScan:
                 #     }
                 #     raw_data = await self.fetch_data(session_name=session, url=self.__base_url, params=payload, headers={"apiKey": self.__api_key})
                 #     return raw_data
+                raw_data = await self.fetch_data(
+                    session_name = session,
+                    url = self.__base_url,
+                    params = payload,
+                    headers={"apiKey": self.__api_key}
+                )
+                return raw_data
 
         except Exception as e:
             return (f"Error in NVD monitoring: {e}")
@@ -97,19 +98,33 @@ class QuickScan:
         parsed_data_list = []
         for vuln in vulnerabilities:
             cve_path = vuln.get("cve", {})
-            parsed_data = {
-                "cve_id": cve_path.get("id", ""),
-                "vulnerabilityDescription": cve_path.get("descriptions", [])[0]["value"].strip(),
-                "published date": cve_path.get("published", ""),
-                "last modified": cve_path.get("lastModified", ""),
-                "vulnStatus": cve_path.get("vulnStatus", ""),
+            try:
+                parsed_data = {
+                    "cve_id": cve_path.get("id", "N/A"),
+                    "vulnerabilityDescription": cve_path.get("descriptions", [])[0]["value"].strip(),
+                    "published date": cve_path.get("published", "N/A"),
+                    "last modified": cve_path.get("lastModified", "N/A"),
+                    "vulnStatus": cve_path.get("vulnStatus", "N/A"),
                 
 
-                "baseScore": re.search(baseScore_regex, str(vuln)).group(1),
-                "baseSeverity": re.search(baseSeverity_regex, str(vuln)).group(1),
-                "oemUrl": re.search(url_regex, str(vuln)).group(1)
+                    "baseScore": re.search(baseScore_regex, str(vuln)).group(1) if re.search(baseScore_regex, str(vuln)) else "N/A",
+                    "baseSeverity": re.search(baseSeverity_regex, str(vuln)).group(1) if re.search(baseSeverity_regex, str(vuln)) else "N/A",
+                
+                    "oemUrl": re.search(url_regex, str(vuln)).group(1) if re.search(url_regex, str(vuln)) else "N/A",
+                }
+            except Exception as e:
+                parsed_data = {
+                    "cve_id": cve_path.get("id", "N/A"),
+                    "error": f"Error parsing vulnerbilities: {e}"
                 }
             parsed_data_list.append(parsed_data)
         # return parsed_data
         return parsed_data_list
+
+# async def main():
+runScan = QuickScan("NVIDIA")
+data = asyncio.run(runScan.parse_formatted_data())
+print(data)
+# if __name__ == "__main__":
+#     asyncio.run(main)
 

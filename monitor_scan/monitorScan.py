@@ -3,7 +3,7 @@ from datetime import datetime
 from hashlib import sha256
 import asyncio
 from scrapers.nvidia_scraper import NVIDIAScraper
-from scrapers.schneider import SchneiderScraper
+# from scrapers.schneider import SchneiderScraper
 
 
 class DatabaseConnection:
@@ -150,6 +150,8 @@ class VendorScraperManager:
         self.vendor_scrapers = {
             "NVIDIA": NVIDIAScraper,
         }
+
+        self.db = DatabaseConnection()
     
     async def process_vendor(self, vendor, products):
         scraper_class = self.vendor_scrapers.get(vendor)
@@ -162,6 +164,27 @@ class VendorScraperManager:
             details = await scraper.run_scraper()
             for detail in details:
                 print(detail)
+    
+                vulnerability_data = {
+                    "vendor": vendor,
+                    "product_name": detail.get("product_name"),
+                    "cve_id": detail.get("cve_id"),
+                    "description": detail.get("description"),
+                    "last_updated": detail.get("last_updated"),
+                    "link": detail.get("link"),
+                    "added_at": datetime.now(),
+                }
+                try:
+                    # Insert the vulnerability if it doesn't already exist
+                    self.db.vulnerabilities_collection.update_one(
+                        {"cve_id": vulnerability_data["cve_id"]},
+                        {"$set": vulnerability_data},
+                        upsert=True
+                    )
+                    print(f"Vulnerability data saved: {vulnerability_data['cve_id']}")
+                except Exception as e:
+                    print(f"Error saving vulnerability data: {e}")
+            
         
     async def process_all_vendors(self, vendor_products):
         tasks = []
@@ -210,25 +233,25 @@ async def main():
         "userId": "6752b04e67108c31580d4b6",
         "email": "downeyjr0000@gmail.com",
         "scanData": [
-            {"vendor": "NVIDIA","vendorWebsite": "https://www.nvidia.com", "products": ["NeMo"]}
+            {"vendor": "Dell", "vendorWebsite": "https://www.dell.com", "products": ["Product A", "one"]},
+            {"vendor": "NVIDIA","vendorWebsite": "https://www.nvidia.com", "products": ["NeMo", "ChatRTX", "GPU display driver"]}
         ]
     }
 
-    x = {'6752b04e67108c31580d4b6': {'NVIDIA': ['NeMo']}}
-    y = {'NVIDIA': ['nemo']}
-    z = y.get("NVIDIA")
+    # x = {'6752b04e67108c31580d4b6': {'NVIDIA': ['NeMo']}}
+    # y = {'NVIDIA': ['nemo']}
+    # z = y.get("NVIDIA")
 
 
     db = DatabaseConnection()
     # db.initialize_collections()
-    # # db.clear_collections()
+    # db.clear_collections()
     # db.process_and_store_payload(payload=payload)
     # db.process_and_store_payload(payload=payload1)
     # db.process_and_store_payload(payload=payload2)
-    # db.process_and_store_payload(payload=payload3)
+    db.process_and_store_payload(payload=payload3)
 
     # print("Database connection done successfully")
-    # db.close_connections()
 
     sp = ScraperManager()
     # data = asyncio.run(sp.fetch_user_products(["6752b04e67108c31580d4b53"]))
@@ -237,6 +260,7 @@ async def main():
     print(data)
     vsp = sp.get_vendor_specific_product(data)
     print(vsp)
+    
 
     # manager = VendorScraperManager()
     # vsm = await manager.process_all_vendors(z)
@@ -251,7 +275,9 @@ async def main():
     
     # Process all vendors concurrently
     await manager.process_all_vendors(vsp)
+    
 
+    db.close_connections()
 
 
 if __name__ == "__main__":

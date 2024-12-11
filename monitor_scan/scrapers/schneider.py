@@ -9,23 +9,49 @@ from bs4 import BeautifulSoup
 
 
 class SchneiderScraper:
+    __base_url = (
+        "https://www.se.com/ww/en/work/support/cybersecurity/security-notifications.jsp"
+    )
 
-    __base_url = "https://www.se.com/ww/en/work/support/cybersecurity/security-notifications.jsp"
-
-    def __init__(self):
-        self.headless = True
+    def __init__(self, product_names: list, headless: bool = True):
+        self.headless = headless
         self.driver = None
+        self.product_names = product_names
 
-    def setup_driver(self):
+    def clean_text(self, text):
         """
+        Cleans unwanted characters from text.
+        """
+        if text:
+            return (
+                text.replace("\u200b", "")
+                .replace("\u2022", "")
+                .replace("\u00a0", " ")
+                .replace("\u2122", "")
+                .strip()
+            )
+        return text
+
+    async def __aenter__(self):
+        """
+        Asynchronous context manager entry.
         Sets up the Selenium WebDriver for automating the browser.
         """
         chrome_options = Options()
         if self.headless:
-            chrome_options.add_argument("--headless")  # Runs the browser without opening a visible window
-        chrome_options.add_argument("--no-sandbox")  # Improve compatibility in certain environments like Docker or CI/CD pipelines
+            chrome_options.add_argument("--headless")
+        chrome_options.add_argument("--no-sandbox")
         chrome_options.add_argument("--disable-dev-shm-usage")
         self.driver = webdriver.Chrome(options=chrome_options)
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        """
+        Asynchronous context manager exit.
+        Closes the Selenium WebDriver.
+        """
+        if self.driver:
+            self.driver.quit()
 
     def scrape_table(self):
         """
@@ -34,7 +60,7 @@ class SchneiderScraper:
         """
         try:
             # Open the website using Selenium WebDriver
-            self.driver.get(self.url)
+            self.driver.get(self.__base_url)
 
             # Wait for the table to load
             wait = WebDriverWait(self.driver, 10)
@@ -74,7 +100,13 @@ class SchneiderScraper:
                 for idx, col in enumerate(row):
                     if idx < len(headers):
                         key = headers[idx].strip()
-                        value = col.replace("\u2022", "").replace("\u200b", " ").replace("\u00a0", " ").replace("\u2122", "").strip()
+                        value = (
+                            col.replace("\u2022", "")
+                            .replace("\u200b", " ")
+                            .replace("\u00a0", " ")
+                            .replace("\u2122", "")
+                            .strip()
+                        )
                         row_dict[key] = value
                 clean_data.append(row_dict)
 
@@ -84,45 +116,43 @@ class SchneiderScraper:
             print(f"Error during scraping: {e}")
             return None
 
-        finally:
-            # Close the WebDriver
-            if self.driver:
-                self.driver.quit()
+    async def run_scraper(self):
+        """
+        Asynchronous method to scrape the table and filter results based on product names.
+        """
+        data = await asyncio.to_thread(self.scrape_table)
+        filtered_data = []
+        if data:
+            for product_title in self.product_names:
+                for entry in data:
+                    if product_title.lower() in entry.get("Title", "").lower():
+                        filtered_data.append(
+                            {
+                                "product_name": entry.get("Title", "Unknown"),
+                                "cve_id": entry.get("CVE", "Unknown"),
+                                "severity": entry.get("Severity", "Unknown"),
+                                "description": entry.get("Description", "No description available."),
+                                "last_updated": entry.get("Last updated", "Unknown"),
+                                "link": self.__base_url,
+                            }
+                        )
+        return filtered_data
 
 
-async def run_scraper(url, product_titles, headless=True):
-    """
-    Asynchronous function to run the SchneiderScraper and filter results.
-    """
-    scraper = SchneiderScraper(url, headless=headless)
-    scraper.setup_driver()
-    data = await asyncio.to_thread(scraper.scrape_table)
-    filtered_data = []
-    if data:
-        for product_title in product_titles:
-            for entry in data:
-                if product_title.lower() in entry.get("Title", "").lower():
-                    product_name = entry.get("Title", "Unknown")
-                    descriptions = entry.get("Description", "No description available.")
-                    filtered_data.append({
-                        "product_name": product_name,
-                        "cve_id": entry.get("CVE", "Unknown"),
-                        "last_updated": entry.get("Last updated", "Unknown"),
-                        "CSAF": entry.get("CSAF", "Unknown"),
-                        "description": descriptions,
-                        "link": url,
-                    })
-    return filtered_data
 
 
 async def main():
-    product_titles = input("Enter the product titles to filter (separated by commas): ").strip().split(',')
-    filtered_result = await run_scraper(url, product_titles, headless)
-    if filtered_result:
-        print("Filtered results:\n")
-        print(json.dumps(filtered_result, indent=4))
-    else:
-        print("No results found for the provided product titles.")
+    product_lists = [
+        "PowerLogic PM5300 Series",
+    ]
+
+    async with SchneiderScraper(product_lists) as scraper:
+        filtered_result = await scraper.run_scraper()
+        if filtered_result:
+            print("Filtered results:\n")
+            print(json.dumps(filtered_result, indent=4))
+        else:
+            print("No results found for the provided product titles.")
 
 
 if __name__ == "__main__":
